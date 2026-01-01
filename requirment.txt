@@ -1,9 +1,9 @@
 streamlit
-langchain-groq
+python-dotenv
 groq
 langchain
 langchain-community
-chromadb
-python-dotenv
-serpapi
+langchain-groq
 sentence-transformers
+chromadb
+torch

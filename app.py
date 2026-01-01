@@ -1,68 +1,75 @@
-import streamlit as st
 import os
+import streamlit as st
+from dotenv import load_dotenv
 from groq import Groq
-from langchain_groq import ChatGroq
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
 
-# Page config
-st.set_page_config(page_title="RAG Chatbot", page_icon="🤖")
+# =========================
+# LOAD ENV
+# =========================
+load_dotenv()
 
-# Initialize Groq
-@st.cache_resource
-def initialize_llm():
-    return ChatGroq(
-        groq_api_key=st.secrets["GROQ_API_KEY"],
-        model_name="llama-3.3-70b-versatile",
-        temperature=0.7
-    )
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# Initialize vector store
-@st.cache_resource
-def initialize_vectorstore():
-    embeddings = HuggingFaceEmbeddings()
-    vectorstore = Chroma(
-        persist_directory="./vectorstore",
-        embedding_function=embeddings
-    )
-    return vectorstore
+if not GROQ_API_KEY:
+    st.error("❌ GROQ_API_KEY not found in .env file")
+    st.stop()
 
-# Initialize chatbot
-llm = initialize_llm()
-vectorstore = initialize_vectorstore()
+# =========================
+# GROQ CLIENT
+# =========================
+client = Groq(api_key=GROQ_API_KEY)
 
-memory = ConversationBufferMemory(
-    memory_key="chat_history",
-    return_messages=True
+# =========================
+# STREAMLIT CONFIG
+# =========================
+st.set_page_config(
+    page_title="Groq Chatbot",
+    page_icon="🤖",
+    layout="centered"
 )
 
-qa_chain = ConversationalRetrievalChain.from_llm(
-    llm=llm,
-    retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
-    memory=memory
-)
+st.title("🤖 Groq Chatbot")
+st.caption("Powered by Groq LLaMA-3")
 
-# UI
-st.title("🤖 RAG Chatbot with Groq")
-
+# =========================
+# CHAT STATE
+# =========================
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = [
+        {"role": "system", "content": "You are a helpful AI assistant."}
+    ]
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# =========================
+# DISPLAY CHAT
+# =========================
+for msg in st.session_state.messages[1:]:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-if prompt := st.chat_input("Ask me anything..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+# =========================
+# USER INPUT
+# =========================
+if prompt := st.chat_input("Ask something..."):
+    # User message
+    st.session_state.messages.append(
+        {"role": "user", "content": prompt}
+    )
     with st.chat_message("user"):
         st.markdown(prompt)
-    
+
+    # Assistant response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = qa_chain({"question": prompt})
-            answer = response["answer"]
+            completion = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=st.session_state.messages,
+                temperature=0.7,
+                max_tokens=512
+            )
+
+            answer = completion.choices[0].message.content
             st.markdown(answer)
-    
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+
+    st.session_state.messages.append(
+        {"role": "assistant", "content": answer}
+    )
